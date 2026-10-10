@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>表格按地市拆分工具</title>
+<style>
+  :root{ --pri:#2563eb; --pri-d:#1d4ed8; --bg:#f5f7fb; --card:#fff; --bd:#e2e8f0; --txt:#1e293b; --mut:#64748b; --ok:#16a34a; --warn:#d97706; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif; background:var(--bg); color:var(--txt); font-size:14px; }
+  header{ background:linear-gradient(135deg,#2563eb,#1e40af); color:#fff; padding:22px 28px; }
+  header h1{ margin:0 0 6px; font-size:20px; }
+  header p{ margin:0; opacity:.85; font-size:13px; }
+  .wrap{ max-width:1080px; margin:0 auto; padding:20px; }
+  .card{ background:var(--card); border:1px solid var(--bd); border-radius:10px; padding:18px; margin-bottom:16px; box-shadow:0 1px 2px rgba(0,0,0,.03); }
+  .card h2{ margin:0 0 12px; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .card h2 .n{ width:22px; height:22px; border-radius:50%; background:var(--pri); color:#fff; font-size:12px; display:inline-flex; align-items:center; justify-content:center; }
+  .drop{ border:2px dashed #b9c4d6; border-radius:10px; padding:26px; text-align:center; color:var(--mut); cursor:pointer; transition:.15s; background:#fbfcfe; }
+  .drop:hover,.drop.over{ border-color:var(--pri); background:#eff6ff; color:var(--pri); }
+  .drop b{ color:var(--pri); }
+  .files{ margin-top:10px; display:flex; flex-direction:column; gap:5px; }
+  .file{ display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; border-radius:6px; padding:6px 10px; font-size:12.5px; }
+  .file .rm{ color:#dc2626; cursor:pointer; margin-left:10px; }
+  .row{ display:flex; gap:14px; flex-wrap:wrap; align-items:center; }
+  label.sel{ font-size:13px; color:var(--mut); }
+  select,input[type=text],input[type=number]{ padding:6px 8px; border:1px solid var(--bd); border-radius:6px; font-size:13px; background:#fff; color:var(--txt); max-width:100%; box-sizing:border-box; }
+  select.ms{ min-width:220px; }
+  input[type=number]{ width:80px; }
+  table{ border-collapse:collapse; width:100%; font-size:12.5px; table-layout:fixed; }
+  th,td{ border:1px solid var(--bd); padding:6px 8px; text-align:left; vertical-align:middle; overflow-wrap:anywhere; }
+  th{ background:#f8fafc; color:var(--mut); font-weight:600; white-space:nowrap; }
+  .btn{ background:var(--pri); color:#fff; border:none; border-radius:7px; padding:10px 20px; font-size:14px; cursor:pointer; }
+  .btn:hover{ background:var(--pri-d); }
+  .btn:disabled{ background:#cbd5e1; cursor:not-allowed; }
+  .btn.ghost{ background:#fff; color:var(--pri); border:1px solid var(--pri); }
+  .tag{ display:inline-block; padding:1px 7px; border-radius:20px; font-size:11.5px; }
+  .tag.ok{ background:#dcfce7; color:#166534; }
+  .tag.no{ background:#fee2e2; color:#991b1b; }
+  .muted{ color:var(--mut); font-size:12.5px; }
+  .hide{ display:none; }
+  .scroll{ max-height:360px; overflow:auto; border:1px solid var(--bd); border-radius:8px; }
+  .bar{ display:flex; gap:10px; align-items:center; margin-top:14px; flex-wrap:wrap; }
+  .kv{ display:flex; gap:20px; flex-wrap:wrap; margin-bottom:10px; }
+  .kv div span{ color:var(--mut); }
+  .stat{ font-weight:700; color:var(--pri); }
+  .warnbox{ background:#fffbeb; border:1px solid #fde68a; color:#92400e; padding:8px 12px; border-radius:7px; font-size:12.5px; margin-top:10px; }
+  .chips{ display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .chip{ background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; border-radius:20px; padding:2px 10px; font-size:12px; }
+  .chip b{ color:#1d4ed8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>表格按地市拆分工具</h1>
+  <p>上传一个表格 → 自动识别「地市」列与表头 → 一个地市生成一份新表格（文件名 = 源文件名-地市名称），打包为 ZIP 下载</p>
+</header>
+
+<div class="wrap">
+
+  <div class="card">
+    <h2><span class="n">1</span>上传表格文件（单个）</h2>
+    <div class="drop" id="srcDrop">把要拆分的<b>表格文件</b>拖到这里，或点击选择（.xlsx / .xlsm）</div>
+    <input type="file" id="srcInput" accept=".xlsx,.xlsm" class="hide">
+    <div class="files" id="srcFiles"></div>
+  </div>
+
+  <div class="card" id="cfgCard">
+    <h2><span class="n">2</span>识别与参数确认</h2>
+    <div id="cfgEmpty" class="muted">请先上传表格文件。</div>
+    <div id="cfgBody" class="hide">
+      <div class="row">
+        <label class="sel">工作表：<select id="sheetSel" class="ms"></select></label>
+        <label class="sel">地市列：<select id="colSel" class="ms"></select></label>
+        <label class="sel">表头行数：<input type="number" id="headRows" min="1" step="1"></label>
+      </div>
+      <div class="kv" style="margin-top:12px;">
+        <div>数据行：<span id="rowInfo" class="stat">-</span></div>
+        <div>地市数量：<span id="groupInfo" class="stat">-</span></div>
+        <div>识别状态：<span id="autoInfo" class="muted">-</span></div>
+      </div>
+      <div id="groupsBox" class="chips"></div>
+      <div class="bar">
+        <button class="btn" id="runBtn" disabled>拆分并下载 ZIP</button>
+        <button class="btn ghost" id="autoBtn">恢复自动识别</button>
+        <span class="muted" id="runMsg"></span>
+      </div>
+      <div style="margin-top:14px;" class="muted">表头预览（前 6 行 × 前 12 列）：</div>
+      <div class="scroll" style="margin-top:6px;"><table id="headPreview"></table></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="libs/xlsx.full.min.js"></script>
+<script src="libs/jszip.min.js"></script>
+<script>
+(function(){
+  "use strict";
+  const $ = id => document.getElementById(id);
+
+  // ---------------- 基础工具 ----------------
+  function colLetter(n){ let s=''; while(n>0){ const m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=(n-m-1)/26; } return s; }
+  function colNumber(letters){ let n=0; for(let i=0;i<letters.length;i++) n=n*26+(letters.charCodeAt(i)-64); return n; }
+  function norm(s){ return String(s==null?'':s).replace(/[\s\n\r]+/g,'').trim(); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function decodeXml(s){ return String(s).replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&'); }
+  function escapeRegExp(s){ return String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+
+  // 展开合并单元格，返回二维数组（行列均为 0 基绝对索引）
+  function expandGrid(ws){
+    if(!ws || !ws['!ref']) return { grid:[], range:{s:{r:0,c:0},e:{r:0,c:0}} };
+    const range = XLSX.utils.decode_range(ws['!ref']);
+    const grid = [];
+    for(let r=range.s.r;r<=range.e.r;r++){
+      const row=[];
+      for(let c=range.s.c;c<=range.e.c;c++){
+        const cell = ws[XLSX.utils.encode_cell({r:r,c:c})];
+        row[c] = cell ? (cell.v!=null?cell.v:null) : null;
+      }
+      grid[r]=row;
+    }
+    (ws['!merges']||[]).forEach(function(m){
+      const v = grid[m.s.r] ? grid[m.s.r][m.s.c] : null;
+      for(let r=m.s.r;r<=m.e.r;r++){
+        if(!grid[r]) grid[r]=[];
+        for(let c=m.s.c;c<=m.e.c;c++) grid[r][c]=v;
+      }
+    });
+    return { grid:grid, range:range };
+  }
+
+  function isRowEmpty(rowArr){
+    if(!rowArr) return true;
+    for(let i=0;i<rowArr.length;i++){
+      const v=rowArr[i];
+      if(v!=null && String(v).trim()!=='') return false;
+    }
+    return true;
+  }
+
+  // ---------------- 状态 ----------------
+  let srcBuffer=null, srcName='', srcWb=null;
+  let curSheet='', groupCol=0, headerEnd=0, dataStart=0, lastRow=0;
+  let autoPick=null;      // 自动识别结果
+  let groups=[], byGroup={};
+
+  // ---------------- 拖拽 / 选择 ----------------
+  function bindDrop(dropEl, inputEl, onFiles){
+    dropEl.addEventListener('click',()=>inputEl.click());
+    inputEl.addEventListener('change',()=>{ if(inputEl.files.length) onFiles(Array.from(inputEl.files)); inputEl.value=''; });
+    ['dragenter','dragover'].forEach(ev=>dropEl.addEventListener(ev,e=>{ e.preventDefault(); dropEl.classList.add('over'); }));
+    ['dragleave','drop'].forEach(ev=>dropEl.addEventListener(ev,e=>{ e.preventDefault(); dropEl.classList.remove('over'); }));
+    dropEl.addEventListener('drop',e=>{ const fs=Array.from(e.dataTransfer.files||[]); if(fs.length) onFiles(fs); });
+  }
+  function readBuf(file){ return new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsArrayBuffer(file); }); }
+
+  bindDrop($('srcDrop'), $('srcInput'), files => loadSource(files[0]));
+
+  async function loadSource(file){
+    if(!file) return;
+    if(!/\.(xlsx|xlsm)$/i.test(file.name)){ alert('请使用 .xlsx / .xlsm 格式的表格文件'); return; }
+    srcName = file.name;
+    srcBuffer = await readBuf(file);
+    try{ srcWb = XLSX.read(new Uint8Array(srcBuffer), { type:'array', cellFormula:true }); }
+    catch(err){ alert('读取失败：'+err.message); return; }
+    $('srcFiles').innerHTML = '<div class="file"><span>文件：'+esc(file.name)+'</span><span><span class="tag ok">已载入</span></span></div>';
+    autoPick = detectWorkbook(srcWb);
+    buildSheetSelector();
+    applyPick(autoPick);
+  }
+
+  // ---------------- 自动识别 ----------------
+  // 返回 { sheet, groupCol(1基), headerEnd(1基), dataStart(1基), lastRow(1基), matchedLabel }
+  function detectWorkbook(wb){
+    let best=null;
+    wb.SheetNames.forEach(function(sn){
+      const d = detectSheet(wb, sn);
+      if(d && (!best || (d.score>best.score))) best = d;
+    });
+    if(!best){ // 兜底：第一个工作表
+      const sn = wb.SheetNames[0];
+      const d = detectSheet(wb, sn, true);
+      best = d || { sheet:sn, groupCol:1, headerEnd:1, dataStart:2, lastRow:1, score:0, matchedLabel:'' };
+    }
+    return best;
+  }
+
+  // 表头文字评分：越接近「地市」列名分越高
+  function headerTextScore(v){
+    const t = norm(v);
+    if(!t) return 0;
+    if(/^(地市|城市|所属地市|地市名称|所在城市)$/.test(t)) return 100;
+    const bad = /绩效|自评|达成|目标|率|得分|系数|扣减|分值|数量/;
+    if(/^(地市|城市)/.test(t) && !bad.test(t) && t.length<=24) return 80;
+    if(/(地市|城市)/.test(t) && !bad.test(t) && t.length<=24) return 60;
+    return 0;
+  }
+  // 数据列评分：倾向「短文本、非数字、有较多非空值」的列
+  function columnDataScore(grid, hRow, c, range){
+    let filled=0, shortText=0, numeric=0;
+    const end = Math.min(range.e.r, hRow+60);
+    for(let r=hRow+1; r<=end; r++){
+      const v = grid[r]?grid[r][c]:null;
+      if(v==null || String(v).trim()==='') continue;
+      filled++;
+      const s = String(v).trim();
+      if(/^-?[\d,]+(\.\d+)?%?$/.test(s)) numeric++;
+      else if(s.length<=10) shortText++;
+    }
+    if(!filled) return -200;
+    return shortText*2 - numeric;
+  }
+
+  function detectSheet(wb, sn, fallback){
+    const ws = wb.Sheets[sn];
+    if(!ws || !ws['!ref']) return null;
+    const ex = expandGrid(ws);
+    const grid = ex.grid, range = ex.range;
+    const scanEnd = Math.min(range.e.r, range.s.r+11);
+
+    // 收集所有候选（表头文字含「地市/城市」的单元格），按 表头分×100+数据分 择优
+    let hRow=-1, hCol=-1, label='', bestScore=-Infinity;
+    for(let r=range.s.r; r<=scanEnd; r++){
+      for(let c=range.s.c; c<=range.e.c; c++){
+        const v = grid[r]?grid[r][c]:null;
+        const hs = headerTextScore(v);
+        if(hs<=0) continue;
+        // 同一列同一表头可能因合并被填充多行，取该列最靠下出现位置作为表头行
+        const total = hs*100 + columnDataScore(grid, r, c, range);
+        if(total>bestScore){ bestScore=total; hRow=r; hCol=c; label=String(v).trim(); }
+      }
+    }
+
+    if(hCol<0){
+      if(!fallback) return null;
+      hCol = range.s.c+1; hRow = range.s.r; label=''; bestScore=0;
+    }
+
+    const nl = norm(label);
+    let ds=-1;
+    for(let r=hRow+1; r<=range.e.r; r++){
+      const v = grid[r]?grid[r][hCol]:null;
+      const s = v==null?'':String(v).trim();
+      if(s!==''){ if(nl && norm(s)===nl) continue; ds=r; break; }
+    }
+    if(ds<0) ds = hRow+1;
+
+    return {
+      sheet: sn,
+      groupCol: hCol+1,
+      headerEnd: ds,        // 0基 ds 是数据首行 → 1基下 表头末行 = ds
+      dataStart: ds+1,
+      lastRow: range.e.r+1,
+      score: bestScore===(-Infinity)?0:bestScore,
+      matchedLabel: label
+    };
+  }
+
+  function buildSheetSelector(){
+    const sel = $('sheetSel'); sel.innerHTML='';
+    srcWb.SheetNames.forEach(sn=>{
+      const o=document.createElement('option'); o.value=sn; o.textContent=sn; sel.appendChild(o);
+    });
+    sel.value = autoPick.sheet;
+    sel.onchange = ()=>{ const d=detectSheet(srcWb, sel.value, true); applyPick(d); };
+  }
+
+  function applyPick(d){
+    if(!d) return;
+    $('sheetSel').value = d.sheet;
+    curSheet = d.sheet;
+    headerEnd = d.headerEnd;
+    dataStart = d.dataStart;
+    lastRow = d.lastRow;
+    groupCol = d.groupCol;
+    $('headRows').value = headerEnd;
+    rebuildColumnSelector(d.groupCol);
+    refresh();
+  }
+
+  // 列下拉：按表头区域为每列取一个标签
+  function rebuildColumnSelector(selectedCol){
+    const ws = srcWb.Sheets[curSheet];
+    const ex = expandGrid(ws);
+    const grid = ex.grid, range = ex.range;
+    const sel = $('colSel'); sel.innerHTML='';
+    for(let c=range.s.c; c<=range.e.c; c++){
+      let label='';
+      for(let r=headerEnd-1; r>=range.s.r; r--){
+        const v = grid[r]?grid[r][c]:null;
+        if(v!=null && String(v).trim()!==''){ label=String(v).trim(); break; }
+      }
+      const o=document.createElement('option');
+      o.value = c+1;
+      o.textContent = colLetter(c+1)+' 列 · '+(label||'(无表头)');
+      sel.appendChild(o);
+    }
+    sel.value = selectedCol;
+    sel.onchange = ()=>{ groupCol = Number(sel.value); refresh(); };
+  }
+
+  // 读取表头行数（可手动调整）
+  $('headRows').addEventListener('input', ()=>{
+    const n = parseInt($('headRows').value,10);
+    if(!n || n<1) return;
+    headerEnd = n;
+    dataStart = n+1;
+    rebuildColumnSelector(groupCol);
+    refresh();
+  });
+
+  $('autoBtn').addEventListener('click', ()=>{ if(autoPick) applyPick(autoPick); });
+
+  function refresh(){
+    if(!srcWb){ return; }
+    $('cfgEmpty').classList.add('hide'); $('cfgBody').classList.remove('hide');
+
+    // 计算分组
+    const ws = srcWb.Sheets[curSheet];
+    const ex = expandGrid(ws);
+    const grid = ex.grid;
+    groups=[]; byGroup={};
+    for(let r=dataStart; r<=lastRow; r++){
+      const rowArr = grid[r-1]||[];
+      const raw = rowArr[groupCol-1];
+      let s = raw==null?'':String(raw).trim();
+      let g;
+      if(s===''){ if(isRowEmpty(rowArr)) continue; g='未分类'; } else g=s;
+      if(!byGroup[g]){ byGroup[g]=[]; groups.push(g); }
+      byGroup[g].push(r);
+    }
+
+    const dataCount = groups.reduce((a,g)=>a+byGroup[g].length,0);
+    $('rowInfo').textContent = '第 '+dataStart+' ~ '+(dataStart+dataCount-1)+' 行（共 '+dataCount+' 行）';
+    $('groupInfo').textContent = groups.length + ' 个';
+    $('autoInfo').textContent = (autoPick && autoPick.sheet===curSheet)
+      ? ('自动识别：地市列 '+colLetter(autoPick.groupCol)+'，表头 '+autoPick.headerEnd+' 行')
+      : '已手动调整';
+
+    $('groupsBox').innerHTML = groups.map(g=>
+      '<span class="chip">'+esc(g)+' <b>'+byGroup[g].length+'</b></span>').join('');
+    if(!groups.length) $('groupsBox').innerHTML = '<span class="muted">未识别到数据行，请调整「地市列」或「表头行数」。</span>';
+
+    renderHeadPreview(grid);
+    $('runBtn').disabled = !groups.length;
+    $('runMsg').textContent = '';
+  }
+
+  function renderHeadPreview(grid){
+    const range = XLSX.utils.decode_range(srcWb.Sheets[curSheet]['!ref']);
+    const maxR = Math.min(headerEnd, 6);
+    const maxC = Math.min(range.e.c, range.s.c+11);
+    let h='<tr>';
+    h+='<th style="width:44px">行</th>';
+    for(let c=range.s.c;c<=maxC;c++) h+='<th>'+colLetter(c+1)+'</th>';
+    h+='</tr>';
+    for(let r=range.s.r;r<headerEnd && r<maxR;r++){
+      h+='<tr><td>'+(r+1)+'</td>';
+      for(let c=range.s.c;c<=maxC;c++){
+        const v = grid[r]?grid[r][c]:null;
+        const hl = (c+1===groupCol) ? ' style="background:#eff6ff;font-weight:700;color:#1d4ed8"' : '';
+        h+='<td'+hl+'>'+esc(v==null?'':v)+'</td>';
+      }
+      h+='</tr>';
+    }
+    $('headPreview').innerHTML = h;
+  }
+
+  // ================= XML 处理（保留原有格式/公式/合并） =================
+
+  async function resolveSheetPath(zip, sheetName){
+    const wbxml = await zip.file('xl/workbook.xml').async('string');
+    const rels = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const sheets=[]; let m, re=/<sheet\b[^>]*>/g;
+    while((m=re.exec(wbxml))){
+      const tag=m[0];
+      const name=(tag.match(/name="([^"]*)"/)||[])[1];
+      const rid=(tag.match(/r:id="([^"]*)"/)||[])[1];
+      if(name!==undefined && rid) sheets.push({name:decodeXml(name), rid:rid});
+    }
+    const relMap={}; re=/<Relationship\b[^>]*>/g;
+    while((m=re.exec(rels))){
+      const tag=m[0];
+      const id=(tag.match(/Id="([^"]*)"/)||[])[1];
+      const target=(tag.match(/Target="([^"]*)"/)||[])[1];
+      if(id && target) relMap[id]=target;
+    }
+    const s = sheets.find(x=>x.name===sheetName);
+    if(!s || !relMap[s.rid]) throw new Error('无法定位工作表 XML：'+sheetName);
+    return 'xl/'+relMap[s.rid].replace(/^\/?/,'').replace(/^xl\//,'');
+  }
+
+  // 公式内相对引用按行/列偏移；带 $ 的绝对引用不移动；带工作表前缀（!）的不移动
+  function shiftRefs(formula, dRow, dCol){
+    return String(formula).replace(/(\$?)([A-Za-z]{1,3})(\$?)(\d+)/g, function(m, d1, col, d2, row, offset, whole){
+      const prev = offset>0 ? whole[offset-1] : '';
+      if(prev==='!') return m;             // 跨工作表引用，不动
+      const next = whole[offset+m.length]||'';
+      if(next==='(' || /[A-Za-z0-9_$]/.test(next)) return m; // 函数名/非单元格引用
+      let r = parseInt(row,10) + (d2?0:dRow);
+      let c = colNumber(col.toUpperCase()) + (d1?0:dCol);
+      if(r<1 || c<1) return m;
+      return d1 + colLetter(c) + d2 + r;
+    });
+  }
+
+  // 把共享公式(si)展开为每格独立公式
+  function expandSharedFormulas(xml){
+    const masters={}; let m;
+    const masterRe=/<c r="([A-Z]+)(\d+)"([^>]*)>\s*<f t="shared"([^>]*?[^/>])>([\s\S]*?)<\/f>/g;
+    while((m=masterRe.exec(xml))){
+      const si=(m[4].match(/si="([^"]*)"/)||[])[1];
+      if(si!==undefined) masters[si]={col:m[1], row:parseInt(m[2],10), formula:m[5]};
+    }
+    xml = xml.replace(/<c r="([A-Z]+)(\d+)"([^>]*)>\s*<f t="shared"([^>]*?[^/>])>([\s\S]*?)<\/f>/g,
+      function(mm,col,row,attrs){ return '<c r="'+col+row+'"'+attrs+'><f>'+arguments[5]+'</f>'; });
+    xml = xml.replace(/<c r="([A-Z]+)(\d+)"([^>]*)>\s*<f t="shared"([^>]*?)\/>/g,
+      function(mm,col,row,attrs,sharedAttrs){
+        const si=(sharedAttrs.match(/si="([^"]*)"/)||[])[1];
+        const master=masters[si];
+        if(!master) return mm;
+        const f=shiftRefs(master.formula, parseInt(row,10)-master.row, colNumber(col)-colNumber(master.col));
+        return '<c r="'+col+row+'"'+attrs+'><f>'+f+'</f>';
+      });
+    return xml;
+  }
+
+  // 行号整体改版：更新 row r / 单元格 r / 公式行引用
+  function shiftRowXml(rowXml, oldR, newR){
+    const delta = newR-oldR;
+    rowXml = rowXml.replace(/(<row\b[^>]*?)\br="\d+"/, '$1r="'+newR+'"');
+    rowXml = rowXml.replace(/<c r="([A-Z]+)\d+"/g, '<c r="$1'+newR+'"');
+    rowXml = rowXml.replace(/(<f[^>]*>)([\s\S]*?)(<\/f>)/g, function(m,open,body,close){
+      return open + shiftRefs(body, delta, 0) + close;
+    });
+    if(delta!==0) rowXml = rowXml.replace(/(<f[^>]*?\bref="[A-Z]+)\d+"/g, '$1'+newR+'"');
+    return rowXml;
+  }
+
+  // 重建合并单元格：表头内的保留，数据区内整段命中的按新行号搬移，跨越被删行的丢弃
+  function updateMerges(xml, merges, newRef, headerEndRows){
+    if(!xml || xml.indexOf('<mergeCells')<0) return xml;
+    const kept=[];
+    (merges||[]).forEach(function(mg){
+      const s=mg.s, e=mg.e;
+      const mapped=[]; let ok=true;
+      for(let r=s.r; r<=e.r; r++){
+        if(r<=headerEndRows-1) mapped.push(r);           // 表头 0 基行号不变
+        else if(newRef[r+1]!==undefined) mapped.push(newRef[r+1]-1);
+        else { ok=false; break; }
+      }
+      if(!ok || !mapped.length) return;
+      kept.push({ s:{r:mapped[0], c:s.c}, e:{r:mapped[mapped.length-1], c:e.c} });
+    });
+    const inner = kept.map(k=>'<mergeCell ref="'+XLSX.utils.encode_range(k)+'"/>').join('');
+    if(!kept.length){
+      return xml.replace(/<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/,'').replace(/<mergeCells\b[^>]*\/>/,'');
+    }
+    const block = '<mergeCells count="'+kept.length+'">'+inner+'</mergeCells>';
+    if(/<mergeCells\b[^>]*\/>/.test(xml)) return xml.replace(/<mergeCells\b[^>]*\/>/, block);
+    if(/<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/.test(xml)) return xml.replace(/<mergeCells\b[^>]*>[\s\S]*?<\/mergeCells>/, block);
+    return xml.replace('</sheetData>', '</sheetData>'+block); // 理论上不会到这里
+  }
+
+  // 依据分组重建整张工作表的 XML
+  function buildSplitXml(sheetXml, opts){
+    const headerEnd = opts.headerEnd, dataStart = opts.dataStart, keptRows = opts.keptRows;
+    let xml = expandSharedFormulas(sheetXml);
+
+    const rows={};
+    const rowRe=/<row\b[^>]*\br="(\d+)"[^>]*>[\s\S]*?<\/row>|<row\b[^>]*\br="(\d+)"[^>]*\/>/g;
+    let m; while((m=rowRe.exec(xml))) rows[parseInt(m[1]||m[2],10)] = m[0];
+
+    const newRef={}; let nr=dataStart;
+    keptRows.forEach(function(r){ if(rows[r]!==undefined && newRef[r]===undefined){ newRef[r]=nr; nr++; } });
+
+    const parts=[];
+    Object.keys(rows).map(Number).sort(function(a,b){return a-b;}).forEach(function(r){
+      let n;
+      if(r<=headerEnd) n=r;
+      else if(newRef[r]!==undefined) n=newRef[r];
+      else return;
+      parts.push(shiftRowXml(rows[r], r, n));
+    });
+
+    const sdStart = xml.indexOf('<sheetData>');
+    const sdEnd = xml.indexOf('</sheetData>');
+    if(sdStart<0 || sdEnd<0) throw new Error('工作表 XML 结构异常');
+    xml = xml.slice(0, sdStart) + '<sheetData>' + parts.join('') + '</sheetData>' + xml.slice(sdEnd + '</sheetData>'.length);
+
+    const newLast = nr-1;
+    const lastCol = opts.lastCol;
+
+    if(/<dimension\b/.test(xml)) xml = xml.replace(/<dimension ref="[^"]*"\/>/, '<dimension ref="A1:'+lastCol+newLast+'"/>');
+    else xml = xml.replace(/(<worksheet\b[^>]*>)/, '$1<dimension ref="A1:'+lastCol+newLast+'"/>');
+
+    xml = xml.replace(/<autoFilter ref="([^"]*)"/, function(mm, ref){
+      const rng = XLSX.utils.decode_range(ref);
+      rng.e.c = XLSX.utils.decode_col(lastCol);
+      rng.e.r = newLast-1;
+      return '<autoFilter ref="'+XLSX.utils.encode_range(rng)+'"';
+    });
+
+    xml = updateMerges(xml, opts.merges, newRef, headerEnd);
+    return { xml: xml, newLast: newLast };
+  }
+
+  function setFullCalc(wbxml){
+    if(/<calcPr\b/.test(wbxml)){
+      return wbxml.replace(/<calcPr\b([^>]*?)(\/?)>/, function(m, attrs, sc){
+        return '<calcPr' + attrs.replace(/\s*fullCalcOnLoad="[^"]*"/,'') + ' fullCalcOnLoad="1"' + (sc?'/>':'>');
+      });
+    }
+    return wbxml.replace('</workbook>', '<calcPr calcId="0" fullCalcOnLoad="1"/></workbook>');
+  }
+
+  function sanitizeName(s){ return String(s).replace(/[\\\/:*?"<>|]/g,'_').replace(/^\s+|\s+$/g,'') || '未命名'; }
+
+  // ---------------- 执行拆分 ----------------
+  $('runBtn').addEventListener('click', async ()=>{
+    if(!srcWb || !groups.length) return;
+    const btn=$('runBtn'); btn.disabled=true;
+    $('runMsg').innerHTML='正在拆分…';
+    try{
+      const ws = srcWb.Sheets[curSheet];
+      const range = XLSX.utils.decode_range(ws['!ref']);
+      const lastCol = XLSX.utils.encode_col(range.e.c);
+      const merges = ws['!merges'] || [];
+
+      const zip0 = await JSZip.loadAsync(srcBuffer);
+      const sheetPath = await resolveSheetPath(zip0, curSheet);
+      const sheetXml0 = await zip0.file(sheetPath).async('string');
+
+      const base = srcName.replace(/\.(xlsx|xlsm)$/i,'');
+      const zip = new JSZip();
+      const used={}; let done=0;
+
+      for(const g of groups){
+        const built = buildSplitXml(sheetXml0, {
+          headerEnd: headerEnd, dataStart: dataStart,
+          keptRows: byGroup[g], merges: merges, lastCol: lastCol
+        });
+        const z = await JSZip.loadAsync(srcBuffer);
+        z.file(sheetPath, built.xml);
+        let wbxml = await z.file('xl/workbook.xml').async('string');
+        z.file('xl/workbook.xml', setFullCalc(wbxml));
+        const blob = await z.generateAsync({ type:'blob', compression:'DEFLATE' });
+
+        let nm = sanitizeName(g);
+        if(used[nm]) nm += '('+(++used[nm])+')'; else used[nm]=1;
+        zip.file(base + '-' + nm + '.xlsx', blob);
+        done++;
+      }
+
+      const zblob = await zip.generateAsync({ type:'blob', compression:'DEFLATE' });
+      const zname = base + '-按地市拆分.zip';
+      const url = URL.createObjectURL(zblob);
+      const a=document.createElement('a'); a.href=url; a.download=zname; document.body.appendChild(a); a.click();
+      document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),1500);
+
+      $('runMsg').innerHTML = '<span class="tag ok">已拆分 '+done+' 份</span> 已下载 '+esc(zname);
+    }catch(err){
+      console.error(err);
+      $('runMsg').innerHTML = '<span class="tag no">拆分失败</span> '+esc(err.message);
+    }
+    btn.disabled=false;
+  });
+
+})();
+</script>
+</body>
+</html>
